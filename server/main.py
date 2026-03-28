@@ -9,12 +9,22 @@ from mcp.server.stdio import stdio_server
 from mcp import types
 from clients.nass_client import get_nass_data, query_nass_flexible
 
-# logging
+
+# logging — saves to both terminal and a log file
+log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, "usda_nass_server.log")
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler(log_file),
+        logging.StreamHandler()
+    ]
 )
 logger = logging.getLogger("usda-nass-server")
+logger.info(f"Logging to file: {log_file}")
 
 # create the server
 server = Server("usda-nass")

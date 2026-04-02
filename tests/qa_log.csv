@@ -1,0 +1,11 @@
+question,expected_answer,actual_answer,correct,notes
+"What was the corn yield in Iowa in 2022?","200 BU / ACRE","","",""
+"What was soybean production in Illinois in 2022?","","","",""
+"How many acres of corn were planted in Iowa in 2022?","12900000 ACRES","","",""
+"What price did farmers receive for soybeans in Iowa in 2022?","14.20 $ / BU","","",""
+"What was corn production in the US in 2022?","","","",""
+"What was wheat production in Kansas in 2022?","","","",""
+"How has corn yield in Iowa changed from 2018 to 2022?","","","",""
+"What is the current corn price in Iowa?","","","",""
+"What is the current soybean price in Illinois?","","","",""
+"Where should I sell my soybeans — iowa illinois or nebraska?","","","",""

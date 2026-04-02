@@ -8,7 +8,7 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp import types
 from clients.nass_client import get_nass_data, query_nass_flexible
-
+from clients.ams_client import get_ams_price, get_ams_price_comparison
 
 # logging — saves to both terminal and a log file
 log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
@@ -110,6 +110,54 @@ async def list_tools():
                 },
                 "required": ["commodity", "statistic"]
             }
+        ),
+        types.Tool(
+            name="get_ams_price",
+            description="""Get current grain market prices from USDA AMS Market News.
+            Use this when someone asks about:
+            - Current corn or soybean prices today
+            - What price a farmer can sell grain for right now
+            - Local elevator or terminal prices
+            - Grain prices in a specific state or region
+            Available for: iowa, minneapolis, kansas, illinois, nebraska, ohio,
+            texas, missouri, indiana, south dakota, north dakota, minnesota,
+            arkansas, tennessee, kentucky, virginia, pennsylvania, colorado, california""",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "commodity": {
+                        "type": "string",
+                        "description": "The grain e.g. Corn, Soybeans, Wheat, Oats, Sorghum"
+                    },
+                    "location": {
+                        "type": "string",
+                        "description": "US state or market region e.g. iowa, minneapolis, kansas"
+                    }
+                },
+                "required": ["commodity"]
+            }
+        ),
+        types.Tool(
+            name="get_ams_price_comparison",
+            description="""Compare current grain prices across multiple locations.
+            Use this when a farmer wants to know where to sell for the best price.
+            Example: compare corn prices in iowa, illinois, and nebraska to find
+            the highest paying market.""",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "commodity": {
+                        "type": "string",
+                        "description": "The grain e.g. Corn, Soybeans"
+                    },
+                    "locations": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of locations to compare e.g. ['iowa', 'illinois', 'nebraska']"
+                    }
+                },
+                "required": ["commodity", "locations"]
+            }
         )
     ]
 
@@ -137,6 +185,22 @@ async def call_tool(name: str, arguments: dict):
             year_lte=arguments.get("year_lte"),
             agg_level=arguments.get("agg_level", "STATE"),
             unit=arguments.get("unit")
+        )
+        logger.info(f"Tool result: {result}")
+        return [types.TextContent(type="text", text=str(result))]
+
+    if name == "get_ams_price":
+        result = get_ams_price(
+            commodity=arguments["commodity"],
+            location=arguments.get("location", "iowa")
+        )
+        logger.info(f"Tool result: {result}")
+        return [types.TextContent(type="text", text=str(result))]
+
+    if name == "get_ams_price_comparison":
+        result = get_ams_price_comparison(
+            commodity=arguments["commodity"],
+            locations=arguments["locations"]
         )
         logger.info(f"Tool result: {result}")
         return [types.TextContent(type="text", text=str(result))]

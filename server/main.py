@@ -9,8 +9,16 @@ from mcp.server.stdio import stdio_server
 from mcp import types
 from clients.nass_client import get_nass_data, query_nass_flexible
 from clients.ams_client import get_ams_price, get_ams_price_comparison
+from server.security import (
+    check_rate_limit,
+    validate_nass_inputs,
+    validate_ams_inputs,
+    check_for_prompt_injection,
+    redact_sensitive_data,
+    log_security_summary
+)
 
-# logging — saves to both terminal and a log file
+# logging
 log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
 os.makedirs(log_dir, exist_ok=True)
 log_file = os.path.join(log_dir, "usda_nass_server.log")
@@ -28,6 +36,7 @@ logger.info(f"Logging to file: {log_file}")
 
 # create the server
 server = Server("usda-nass")
+
 
 @server.list_tools()
 async def list_tools():
@@ -161,21 +170,54 @@ async def list_tools():
         )
     ]
 
+
 @server.call_tool()
 async def call_tool(name: str, arguments: dict):
-    logger.info(f"Tool called: {name} with arguments: {arguments}")
+    logger.info(f"Tool called: {name} with arguments: {redact_sensitive_data(arguments)}")
+
+    # rate limiting
+    if not check_rate_limit(name):
+        return [types.TextContent(type="text", text=str({
+            "error": "Rate limit exceeded. Please wait a moment before trying again."
+        }))]
 
     if name == "get_nass_data":
+        error = validate_nass_inputs(
+            commodity=arguments.get("commodity", ""),
+            statistic=arguments.get("statistic", ""),
+            state=arguments.get("state"),
+            year=arguments.get("year")
+        )
+        if error:
+            logger.warning(f"Input validation failed: {error}")
+            return [types.TextContent(type="text", text=str(error))]
+
         result = get_nass_data(
             commodity=arguments["commodity"],
             statistic=arguments["statistic"],
             state=arguments["state"],
             year=arguments["year"]
         )
+        result_str = str(result)
+        if check_for_prompt_injection(result_str):
+            logger.warning("Prompt injection detected in NASS response — blocking")
+            return [types.TextContent(type="text", text=str({
+                "error": "Response could not be verified as safe."
+            }))]
         logger.info(f"Tool result: {result}")
-        return [types.TextContent(type="text", text=str(result))]
+        return [types.TextContent(type="text", text=result_str)]
 
     if name == "query_nass_flexible":
+        error = validate_nass_inputs(
+            commodity=arguments.get("commodity", ""),
+            statistic=arguments.get("statistic", ""),
+            state=arguments.get("state"),
+            year=arguments.get("year")
+        )
+        if error:
+            logger.warning(f"Input validation failed: {error}")
+            return [types.TextContent(type="text", text=str(error))]
+
         result = query_nass_flexible(
             commodity=arguments["commodity"],
             statistic=arguments["statistic"],
@@ -186,32 +228,68 @@ async def call_tool(name: str, arguments: dict):
             agg_level=arguments.get("agg_level", "STATE"),
             unit=arguments.get("unit")
         )
+        result_str = str(result)
+        if check_for_prompt_injection(result_str):
+            logger.warning("Prompt injection detected in NASS flexible response — blocking")
+            return [types.TextContent(type="text", text=str({
+                "error": "Response could not be verified as safe."
+            }))]
         logger.info(f"Tool result: {result}")
-        return [types.TextContent(type="text", text=str(result))]
+        return [types.TextContent(type="text", text=result_str)]
 
     if name == "get_ams_price":
+        error = validate_ams_inputs(
+            commodity=arguments.get("commodity", ""),
+            location=arguments.get("location")
+        )
+        if error:
+            logger.warning(f"Input validation failed: {error}")
+            return [types.TextContent(type="text", text=str(error))]
+
         result = get_ams_price(
             commodity=arguments["commodity"],
             location=arguments.get("location", "iowa")
         )
+        result_str = str(result)
+        if check_for_prompt_injection(result_str):
+            logger.warning("Prompt injection detected in AMS response — blocking")
+            return [types.TextContent(type="text", text=str({
+                "error": "Response could not be verified as safe."
+            }))]
         logger.info(f"Tool result: {result}")
-        return [types.TextContent(type="text", text=str(result))]
+        return [types.TextContent(type="text", text=result_str)]
 
     if name == "get_ams_price_comparison":
+        error = validate_ams_inputs(
+            commodity=arguments.get("commodity", ""),
+        )
+        if error:
+            logger.warning(f"Input validation failed: {error}")
+            return [types.TextContent(type="text", text=str(error))]
+
         result = get_ams_price_comparison(
             commodity=arguments["commodity"],
             locations=arguments["locations"]
         )
+        result_str = str(result)
+        if check_for_prompt_injection(result_str):
+            logger.warning("Prompt injection detected in AMS comparison response — blocking")
+            return [types.TextContent(type="text", text=str({
+                "error": "Response could not be verified as safe."
+            }))]
         logger.info(f"Tool result: {result}")
-        return [types.TextContent(type="text", text=str(result))]
+        return [types.TextContent(type="text", text=result_str)]
 
     logger.warning(f"Unknown tool called: {name}")
     return [types.TextContent(type="text", text="Unknown tool")]
 
+
 async def main():
+    log_security_summary()
     logger.info("Starting USDA NASS MCP Server")
     async with stdio_server() as (read, write):
         await server.run(read, write, server.create_initialization_options())
+
 
 if __name__ == "__main__":
     asyncio.run(main())

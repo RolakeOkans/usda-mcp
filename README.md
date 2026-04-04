@@ -151,4 +151,4 @@ Never commit your `.env` file. Use `.env.example` as a template.
 |------|-------|-----------------|
 | MCP / AI Layer | [teammate name] | MCP server, tool definitions, demo UI |
 | Data / APIs | Morolake | API research, client code, field guide |
-| Evaluation / Security | [teammate name] | Q&A testing, OWASP security, accuracy metrics |
+| Evaluation / Security | Neyssa | Q&A testing, OWASP security, accuracy metrics |

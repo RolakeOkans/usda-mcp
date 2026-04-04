@@ -1,0 +1,11 @@
+# 
+from server.insights import interpret_price_comparison
+
+result = get_ams_price_comparison(
+    commodity=arguments["commodity"],
+    locations=arguments["locations"]
+)
+
+insight = interpret_price_comparison(result)
+
+return [types.TextContent(type="text", text=insight)]

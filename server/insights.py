@@ -1,3 +1,5 @@
+#interpreting questions into better answer
+
 def interpret_price_comparison(results):
     if not results:
         return "No valid price data found."

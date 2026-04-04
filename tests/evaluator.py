@@ -1,3 +1,4 @@
+#measures accuracy, how good the system is
 import csv
 
 def evaluate_response(expected, actual):

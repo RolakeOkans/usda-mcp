@@ -8,7 +8,7 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp import types
 from clients.nass_client import get_nass_data, query_nass_flexible
-from clients.ams_client import get_ams_price, get_ams_price_comparison
+from clients.ams_client import get_ams_price, get_ams_price_comparison, search_ams_any
 from server.security import (
     check_rate_limit,
     validate_nass_inputs,
@@ -34,7 +34,6 @@ logging.basicConfig(
 logger = logging.getLogger("usda-nass-server")
 logger.info(f"Logging to file: {log_file}")
 
-# create the server
 server = Server("usda-nass")
 
 
@@ -74,23 +73,22 @@ async def list_tools():
             name="query_nass_flexible",
             description="""Flexible USDA NASS query for any agricultural question.
             Use this for:
-            - Any crop beyond corn and soybeans e.g. WHEAT, COTTON, SORGHUM
+            - Any crop beyond corn and soybeans e.g. WHEAT, COTTON, SORGHUM FOR GRAIN
             - Trend questions spanning multiple years e.g. 2018 to 2022
             - National level data not specific to one state
             - County level data
             - Area harvested vs area planted
-            - Inventory data
-            - Any question the basic get_nass_data tool cannot answer""",
+            - Inventory data""",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "commodity": {
                         "type": "string",
-                        "description": "The crop e.g. CORN, SOYBEANS, WHEAT, COTTON, SORGHUM"
+                        "description": "The crop e.g. CORN, SOYBEANS, WHEAT, SORGHUM FOR GRAIN, COTTON"
                     },
                     "statistic": {
                         "type": "string",
-                        "description": "What to measure e.g. AREA PLANTED, AREA HARVESTED, YIELD, PRODUCTION, PRICE RECEIVED, INVENTORY"
+                        "description": "e.g. AREA PLANTED, AREA HARVESTED, YIELD, PRODUCTION, PRICE RECEIVED, INVENTORY"
                     },
                     "state": {
                         "type": "string",
@@ -98,23 +96,23 @@ async def list_tools():
                     },
                     "year": {
                         "type": "integer",
-                        "description": "Specific year e.g. 2022. Use year_gte and year_lte for ranges."
+                        "description": "Specific year e.g. 2022"
                     },
                     "year_gte": {
                         "type": "integer",
-                        "description": "Get data from this year onwards e.g. 2018 for trends"
+                        "description": "Get data from this year onwards e.g. 2018"
                     },
                     "year_lte": {
                         "type": "integer",
-                        "description": "Get data up to this year e.g. 2022 for trends"
+                        "description": "Get data up to this year e.g. 2022"
                     },
                     "agg_level": {
                         "type": "string",
-                        "description": "Geographic level: STATE, NATIONAL, or COUNTY. Default is STATE."
+                        "description": "STATE, NATIONAL, or COUNTY"
                     },
                     "unit": {
                         "type": "string",
-                        "description": "Unit of measurement e.g. ACRES, BU, BU / ACRE. Leave empty to auto-detect."
+                        "description": "e.g. ACRES, BU, BU / ACRE"
                     }
                 },
                 "required": ["commodity", "statistic"]
@@ -123,14 +121,12 @@ async def list_tools():
         types.Tool(
             name="get_ams_price",
             description="""Get current grain market prices from USDA AMS Market News.
-            Use this when someone asks about:
-            - Current corn or soybean prices today
-            - What price a farmer can sell grain for right now
-            - Local elevator or terminal prices
-            - Grain prices in a specific state or region
-            Available for: iowa, minneapolis, kansas, illinois, nebraska, ohio,
-            texas, missouri, indiana, south dakota, north dakota, minnesota,
-            arkansas, tennessee, kentucky, virginia, pennsylvania, colorado, california""",
+            Use when someone asks about today's price or current market price
+            for grain commodities like corn, soybeans, wheat, oats, sorghum.
+            Available locations: iowa, illinois, kansas, nebraska, minnesota,
+            indiana, ohio, missouri, texas, north dakota, south dakota,
+            arkansas, tennessee, kentucky, virginia, pennsylvania,
+            colorado, california, minneapolis.""",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -140,7 +136,7 @@ async def list_tools():
                     },
                     "location": {
                         "type": "string",
-                        "description": "US state or market region e.g. iowa, minneapolis, kansas"
+                        "description": "US state or market region e.g. iowa, kansas, minneapolis"
                     }
                 },
                 "required": ["commodity"]
@@ -149,9 +145,8 @@ async def list_tools():
         types.Tool(
             name="get_ams_price_comparison",
             description="""Compare current grain prices across multiple locations.
-            Use this when a farmer wants to know where to sell for the best price.
-            Example: compare corn prices in iowa, illinois, and nebraska to find
-            the highest paying market.""",
+            Use when a farmer wants to know where to sell for the best price.
+            Returns prices ranked highest to lowest.""",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -162,10 +157,37 @@ async def list_tools():
                     "locations": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "List of locations to compare e.g. ['iowa', 'illinois', 'nebraska']"
+                        "description": "List of locations e.g. ['iowa', 'illinois', 'nebraska']"
                     }
                 },
                 "required": ["commodity", "locations"]
+            }
+        ),
+        types.Tool(
+            name="search_ams_any",
+            description="""Search USDA AMS Market News for ANY agricultural commodity.
+            Use this when someone asks about commodities not covered by grain prices:
+            - Livestock prices (cattle, hogs, sheep, goats)
+            - Poultry prices (broilers, turkeys, chickens)
+            - Dairy prices (milk, cheese, butter, cream)
+            - Egg prices
+            - Cotton prices
+            - Tobacco prices
+            - Wool prices
+            - Any other commodity AMS reports on""",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "commodity": {
+                        "type": "string",
+                        "description": "Any agricultural commodity e.g. cattle, hogs, milk, eggs, cotton, tobacco, broilers, sheep, wool"
+                    },
+                    "location": {
+                        "type": "string",
+                        "description": "Optional location filter e.g. Omaha, Kansas City, national"
+                    }
+                },
+                "required": ["commodity"]
             }
         )
     ]
@@ -175,7 +197,6 @@ async def list_tools():
 async def call_tool(name: str, arguments: dict):
     logger.info(f"Tool called: {name} with arguments: {redact_sensitive_data(arguments)}")
 
-    # rate limiting
     if not check_rate_limit(name):
         return [types.TextContent(type="text", text=str({
             "error": "Rate limit exceeded. Please wait a moment before trying again."
@@ -201,9 +222,7 @@ async def call_tool(name: str, arguments: dict):
         result_str = str(result)
         if check_for_prompt_injection(result_str):
             logger.warning("Prompt injection detected in NASS response — blocking")
-            return [types.TextContent(type="text", text=str({
-                "error": "Response could not be verified as safe."
-            }))]
+            return [types.TextContent(type="text", text=str({"error": "Response could not be verified as safe."}))]
         logger.info(f"Tool result: {result}")
         return [types.TextContent(type="text", text=result_str)]
 
@@ -231,9 +250,7 @@ async def call_tool(name: str, arguments: dict):
         result_str = str(result)
         if check_for_prompt_injection(result_str):
             logger.warning("Prompt injection detected in NASS flexible response — blocking")
-            return [types.TextContent(type="text", text=str({
-                "error": "Response could not be verified as safe."
-            }))]
+            return [types.TextContent(type="text", text=str({"error": "Response could not be verified as safe."}))]
         logger.info(f"Tool result: {result}")
         return [types.TextContent(type="text", text=result_str)]
 
@@ -253,16 +270,12 @@ async def call_tool(name: str, arguments: dict):
         result_str = str(result)
         if check_for_prompt_injection(result_str):
             logger.warning("Prompt injection detected in AMS response — blocking")
-            return [types.TextContent(type="text", text=str({
-                "error": "Response could not be verified as safe."
-            }))]
+            return [types.TextContent(type="text", text=str({"error": "Response could not be verified as safe."}))]
         logger.info(f"Tool result: {result}")
         return [types.TextContent(type="text", text=result_str)]
 
     if name == "get_ams_price_comparison":
-        error = validate_ams_inputs(
-            commodity=arguments.get("commodity", ""),
-        )
+        error = validate_ams_inputs(commodity=arguments.get("commodity", ""))
         if error:
             logger.warning(f"Input validation failed: {error}")
             return [types.TextContent(type="text", text=str(error))]
@@ -274,9 +287,27 @@ async def call_tool(name: str, arguments: dict):
         result_str = str(result)
         if check_for_prompt_injection(result_str):
             logger.warning("Prompt injection detected in AMS comparison response — blocking")
-            return [types.TextContent(type="text", text=str({
-                "error": "Response could not be verified as safe."
-            }))]
+            return [types.TextContent(type="text", text=str({"error": "Response could not be verified as safe."}))]
+        logger.info(f"Tool result: {result}")
+        return [types.TextContent(type="text", text=result_str)]
+
+    if name == "search_ams_any":
+        error = validate_ams_inputs(
+            commodity=arguments.get("commodity", ""),
+            location=arguments.get("location")
+        )
+        if error:
+            logger.warning(f"Input validation failed: {error}")
+            return [types.TextContent(type="text", text=str(error))]
+
+        result = search_ams_any(
+            commodity=arguments["commodity"],
+            location=arguments.get("location")
+        )
+        result_str = str(result)
+        if check_for_prompt_injection(result_str):
+            logger.warning("Prompt injection detected in AMS any response — blocking")
+            return [types.TextContent(type="text", text=str({"error": "Response could not be verified as safe."}))]
         logger.info(f"Tool result: {result}")
         return [types.TextContent(type="text", text=result_str)]
 

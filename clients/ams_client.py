@@ -10,6 +10,7 @@ BASE_URL = "https://marsapi.ams.usda.gov/services/v1.2/reports"
 # cache report IDs so we don't search every time
 _report_cache = {}
 
+
 def find_grain_report(location: str) -> int | None:
     """
     Dynamically find the right AMS grain report ID for any location.
@@ -61,37 +62,34 @@ def get_ams_price(
 
     Returns current price per bushel and market details.
     """
-
     if not AMS_KEY:
         return {"error": "AMS API key not configured"}
 
     commodity = commodity.strip().title()
     location = location.strip().lower()
 
-    # known report IDs for common locations (fallback if search fails)
     known_reports = {
-        "minneapolis": 3046,
-        "iowa":        2850,
-        "kansas":      2886,
-        "illinois":    3192,
-        "nebraska":    3225,
-        "ohio":        2851,
-        "texas":       2711,
-        "missouri":    2932,
-        "indiana":     3463,
+        "minneapolis":  3046,
+        "iowa":         2850,
+        "kansas":       2886,
+        "illinois":     3192,
+        "nebraska":     3225,
+        "ohio":         2851,
+        "texas":        2711,
+        "missouri":     2932,
+        "indiana":      3463,
         "south dakota": 3186,
         "north dakota": 3878,
-        "minnesota":   3049,
-        "arkansas":    2960,
-        "tennessee":   3088,
-        "kentucky":    2892,
-        "virginia":    3167,
+        "minnesota":    3049,
+        "arkansas":     2960,
+        "tennessee":    3088,
+        "kentucky":     2892,
+        "virginia":     3167,
         "pennsylvania": 3091,
-        "colorado":    2912,
-        "california":  3146,
+        "colorado":     2912,
+        "california":   3146,
     }
 
-    # get report ID
     report_id = known_reports.get(location)
     if not report_id:
         report_id = find_grain_report(location)
@@ -112,7 +110,6 @@ def get_ams_price(
         if not results:
             return {"error": f"No price data found for {commodity} in {location}"}
 
-        # apply filters
         if current_only:
             current = [r for r in results if r.get("current") == "Yes"]
             if current:
@@ -120,7 +117,7 @@ def get_ams_price(
 
         if transport_mode:
             filtered = [r for r in results if
-                       r.get("trans_mode", "").lower() == transport_mode.lower()]
+                        r.get("trans_mode", "").lower() == transport_mode.lower()]
             if filtered:
                 results = filtered
 
@@ -129,22 +126,21 @@ def get_ams_price(
 
         latest = results[0]
         result = {
-            "commodity": latest.get("commodity"),
-            "avg_price": latest.get("avg_price"),
-            "price_min": latest.get("price Min"),
-            "price_max": latest.get("price Max"),
-            "price_unit": latest.get("price_unit"),
-            "report_date": latest.get("report_date"),
-            "location": latest.get("market_location_name"),
+            "commodity":      latest.get("commodity"),
+            "avg_price":      latest.get("avg_price"),
+            "price_min":      latest.get("price Min"),
+            "price_max":      latest.get("price Max"),
+            "price_unit":     latest.get("price_unit"),
+            "report_date":    latest.get("report_date"),
+            "location":       latest.get("market_location_name"),
             "delivery_point": latest.get("delivery_point"),
             "transport_mode": latest.get("trans_mode"),
-            "region": location
+            "region":         location
         }
 
-        # include forward contract info if not current only
         if not current_only and latest.get("delivery_start"):
             result["delivery_start"] = latest.get("delivery_start")
-            result["futures_month"] = latest.get("basis Min Futures Month")
+            result["futures_month"]  = latest.get("basis Min Futures Month")
 
         return result
 
@@ -170,6 +166,77 @@ def get_ams_price_comparison(commodity: str, locations: list) -> list:
         if "error" not in result:
             results.append(result)
 
-    # sort by avg_price highest first
     results.sort(key=lambda x: x.get("avg_price", 0), reverse=True)
     return results
+
+
+def search_ams_any(commodity: str, location: str = None) -> dict:
+    """
+    Search AMS Market News for ANY agricultural commodity.
+    Works for livestock, dairy, poultry, eggs, cotton, tobacco,
+    fruits, vegetables, wool — anything AMS reports on.
+
+    commodity: any agricultural commodity e.g. cattle, hogs, milk,
+               eggs, cotton, tobacco, sheep, broilers, turkey
+    location: optional office location e.g. Kansas City, Omaha
+
+    Returns the most recent report data found.
+    """
+    if not AMS_KEY:
+        return {"error": "AMS API key not configured"}
+
+    try:
+        response = requests.get(
+            BASE_URL,
+            auth=(AMS_KEY, ""),
+            params={"q": commodity.strip().split()[0]},
+            timeout=10
+        )
+        reports = response.json()
+
+        if not isinstance(reports, list) or not reports:
+            return {"error": f"No AMS reports found for '{commodity}'"}
+
+        if location:
+            location_filtered = [
+                r for r in reports
+                if location.lower() in r.get("report_title", "").lower()
+                or location.lower() in r.get("office_name", "").lower()
+            ]
+            if location_filtered:
+                reports = location_filtered
+
+        daily  = [r for r in reports if "daily"  in r.get("report_title", "").lower()]
+        weekly = [r for r in reports if "weekly" in r.get("report_title", "").lower()]
+        chosen = daily or weekly or reports
+
+        top          = chosen[0]
+        slug_id      = top.get("slug_id")
+        report_title = top.get("report_title")
+
+        data_response = requests.get(
+            f"{BASE_URL}/{slug_id}",
+            auth=(AMS_KEY, ""),
+            timeout=10
+        )
+        data  = data_response.json()
+        items = data if isinstance(data, list) else data.get("results", [])
+
+        if not items:
+            return {"error": f"Report found ({report_title}) but no data returned"}
+
+        latest = items[0]
+        return {
+            "commodity":     commodity,
+            "report_title":  report_title,
+            "report_date":   latest.get("report_date"),
+            "office":        latest.get("office_name"),
+            "data":          latest,
+            "total_records": len(items),
+            "note":          f"Showing most recent record from: {report_title}"
+        }
+
+    except requests.exceptions.Timeout:
+        return {"error": "Request timed out. Try again."}
+    except requests.exceptions.RequestException as e:
+        return {"error": f"AMS API request failed: {str(e)}"}

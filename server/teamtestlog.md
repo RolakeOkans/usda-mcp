@@ -1,4 +1,4 @@
-# Red Team Test Log — USDA MCP Server
+# Root Access Team Test Log — USDA MCP Server
 **Team Root Access · Challenge X 2026**
 **Evaluator:** Security Role
 **Purpose:** Validate behavioral guardrails (guardrails.py) against adversarial inputs

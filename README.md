@@ -1,10 +1,12 @@
 # USDA MCP Server
 
-MCP server that connects USDA's NASS QuickStats API to any MCP-compatible
-AI model, allowing farmers, researchers, and USDA staff to ask plain English
-questions about US agricultural data and get accurate, data-backed answers.
+MCP server that connects USDA's NASS QuickStats and AMS Market News APIs
+to any MCP-compatible AI model, allowing farmers, researchers, and USDA
+staff to ask plain English questions about US agricultural data and get
+accurate, data-backed answers.
 
 Built for the Challenge X Hackathon — Feb 28 to Apr 18, 2026.
+Team: Root Access
 
 ---
 
@@ -14,36 +16,31 @@ Farmers, researchers, and USDA staff can ask plain English questions
 about US agricultural data and get accurate, data-backed answers —
 without needing to know what an API is or how to find the data themselves.
 
-Examples of questions the server can answer:
-
-**Planting decisions**
-- "How many acres of corn were planted in Illinois in 2023?"
-- "How does Iowa soybean acreage compare to 2020?"
-
-**Yield and production**
-- "What was the corn yield per acre in Kansas last year?"
-- "Which state produced the most soybeans in 2022?"
-
-**Pricing**
+**Historical data (NASS QuickStats)**
+- "What was the corn yield in Iowa in 2022?"
+- "How has soybean production in Illinois trended from 2018 to 2022?"
+- "How many acres of wheat were planted in Kansas in 2021?"
 - "What price did Iowa farmers receive for corn in 2022?"
-- "How has the soybean price changed over the last 5 years?"
+- "What was national corn production in 2022?"
 
-**Comparisons**
-- "Should I plant corn or soybeans based on recent prices?"
-- "How does Illinois corn production compare to Iowa?"
-
-The server connects to USDA's NASS QuickStats API, retrieves the
-relevant data, and returns a clear answer in plain English.
+**Current market prices (AMS Market News)**
+- "What is the current corn price in Iowa?"
+- "What is today's soybean price in Illinois?"
+- "Where should I sell my soybeans — iowa, illinois, or nebraska?"
+- "What is the current wheat price in Kansas?"
 
 ---
 
-## Current Status
+## Tools
 
-- NASS QuickStats API connection — working
-- 8 verified queries for corn and soybeans — working
-- MCP server tools — in progress
-- AMS Market News API — planned
-- Demo interface — planned
+The server exposes 4 MCP tools:
+
+| Tool | Data Source | What it does |
+|------|-------------|--------------|
+| `get_nass_data` | NASS QuickStats | Fast lookup for corn and soybean yield, acreage, production, price received in any state and year |
+| `query_nass_flexible` | NASS QuickStats | Any crop, any statistic, multi-year trends, national or county level data |
+| `get_ams_price` | AMS Market News | Current cash grain prices by location |
+| `get_ams_price_comparison` | AMS Market News | Compare current prices across multiple states to find the best market |
 
 ---
 
@@ -51,16 +48,24 @@ relevant data, and returns a clear answer in plain English.
 ```
 usda-mcp/
 ├── clients/
-│   └── nass_client.py      # NASS QuickStats API wrapper
+│   ├── nass_client.py       # NASS QuickStats API wrapper
+│   └── ams_client.py        # AMS Market News API wrapper
 ├── server/
+│   ├── main.py              # MCP server — 4 tools
+│   ├── security.py          # OWASP MCP Top 10 mitigations
 │   └── tools/
-│       └── nass.py         # MCP tools (in progress)
+│       └── __init__.py
 ├── tests/
-│   └── qa_log.csv          # Q&A evaluation log
+│   └── qa_log.csv           # Q&A evaluation log
 ├── demo/
-│   └── app.py              # Demo interface
-├── .env.example            # Template for API keys
-└── requirements.txt
+│   └── app.py               # Demo interface (planned)
+├── logs/
+│   └── usda_nass_server.log # Auto-generated server log
+├── .env                     # API keys (never committed)
+├── .env.example             # Template for API keys
+├── requirements.txt         # Pinned dependencies
+├── SECURITY.md              # OWASP MCP Top 10 documentation
+└── README.md
 ```
 
 ---
@@ -73,48 +78,95 @@ git clone https://github.com/RolakeOkans/usda-mcp.git
 cd usda-mcp
 ```
 
-**2. Install dependencies**
+**2. Create a virtual environment**
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
+
+**3. Install dependencies**
 ```bash
 pip install -r requirements.txt
 ```
 
-**3. Create a `.env` file in the root folder**
+**4. Create a `.env` file in the root folder**
 ```
-NASS_API_KEY=your_key_here
+NASS_API_KEY=your_nass_key_here
+AMS_API_KEY=your_ams_key_here
 ```
 
-**4. Get your free NASS API key**
+**5. Get your API keys**
 
-Register at https://www.nass.usda.gov/developer/index.php
-You will receive your key by email within a few minutes.
+NASS: Register at https://www.nass.usda.gov/developer/index.php
+
+AMS: Register at https://mymarketnews.ams.usda.gov
+
+Both are free and issued within minutes.
 
 ---
 
-## Verified Queries
+## Connect to Claude Desktop
 
-All queries tested for Iowa, 2022.
-The same parameters work for any US state and any year.
+Add this to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "usda-nass": {
+      "command": "/path/to/your/python",
+      "args": ["/path/to/usda-mcp/server/main.py"],
+      "env": {
+        "NASS_API_KEY": "your_key_here",
+        "AMS_API_KEY": "your_key_here"
+      }
+    }
+  }
+}
+```
+
+Replace paths with your actual Python and project paths.
+
+---
+
+## Verified Data — NASS QuickStats
+
+All queries tested and confirmed working for Iowa, 2022.
 
 | Commodity | Statistic | Iowa 2022 Result |
 |-----------|-----------|-----------------|
-| Corn | Area planted | 12,900,000 acres |
-| Corn | Yield | 200 bu / acre |
-| Corn | Production | 2,470,000,000 bu |
-| Corn | Price received | $6.62 / bu |
-| Soybeans | Area planted | 10,100,000 acres |
-| Soybeans | Yield | 58.5 bu / acre |
-| Soybeans | Production | 586,755,000 bu |
-| Soybeans | Price received | $14.20 / bu |
+| Corn | Area planted | 12,900,000 ACRES |
+| Corn | Yield | 200 BU / ACRE |
+| Corn | Production | 2,470,000,000 BU |
+| Corn | Price received | $6.62 / BU |
+| Soybeans | Area planted | 10,100,000 ACRES |
+| Soybeans | Yield | 58.5 BU / ACRE |
+| Soybeans | Production | 586,755,000 BU |
+| Soybeans | Price received | $14.20 / BU |
+
+---
+
+## Verified Data — AMS Market News
+
+Current prices confirmed working as of April 2, 2026.
+
+| Commodity | Location | Price |
+|-----------|----------|-------|
+| Corn | Minneapolis | $4.08 / bu |
+| Soybeans | Minneapolis | $11.10 / bu |
+| Corn | Iowa | $4.12 / bu |
+| Corn | Texas | $4.90 / bu |
+| Soybeans | Illinois | $11.76 / bu |
+| Wheat | Kansas | $5.34 / bu |
 
 ---
 
 ## Data Sources
 
-| Source | What it contains | Status |
-|--------|-----------------|--------|
-| NASS QuickStats | Acreage, yield, production, price | Working |
-| AMS Market News | Current and historical commodity prices | Planned |
+| Source | What it covers | Status |
+|--------|---------------|--------|
+| NASS QuickStats | Acreage, yield, production, price received — any crop, any state, any year | Working |
+| AMS Market News | Current cash grain prices at elevators — 19 states + dynamic search | Working |
 | AMS Socrata | Transportation costs and volumes | Stretch goal |
+| ERS | Forecasted prices | Stretch goal |
 
 ---
 
@@ -124,31 +176,48 @@ User asks a plain English question
         ↓
 AI model reads the question and decides which tool to call
         ↓
-MCP server receives the tool call with parameters
+MCP server validates and sanitizes the input
         ↓
-NASS API returns the raw data
+NASS or AMS API returns the raw data
+        ↓
+Server scans response for security issues
         ↓
 AI model interprets the data and returns a plain English answer
         ↓
-User gets a useful, accurate answer
+All tool calls logged to logs/usda_nass_server.log
 ```
 
 ---
 
 ## Security
 
-- API keys are stored in `.env` and never committed to GitHub
-- Server follows OWASP MCP Top 10 security guidelines (in progress)
-- MCP-compliant and AI-agnostic — works with any MCP-compatible client
+This server addresses all 10 OWASP MCP Top 10 risks.
+See [SECURITY.md](SECURITY.md) for full details.
 
-Never commit your `.env` file. Use `.env.example` as a template.
+Summary:
+- API keys stored in `.env`, never committed, redacted from all logs
+- Read-only server — GET requests only, no write access to any USDA system
+- Input sanitization on all tool arguments
+- Rate limiting at 30 requests per minute per tool
+- Prompt injection detection on all API responses
+- Full audit logging of every tool call
+
+Never commit your `.env` file. It is listed in `.gitignore`.
 
 ---
 
-## Team
+## Team — Root Access
 
 | Role | Owner | Responsibilities |
 |------|-------|-----------------|
-| MCP / AI Layer | [teammate name] | MCP server, tool definitions, demo UI |
-| Data / APIs | Morolake | API research, client code, field guide |
-| Evaluation / Security | Neyssa | Q&A testing, OWASP security, accuracy metrics |
+| Data / APIs | Morolake | API research, NASS client, AMS client, MCP server, security |
+| MCP / AI Layer | [Gabriela] | AI layer, demo UI |
+| Evaluation / Security | [Neyssa] | Q&A testing, accuracy metrics |
+
+---
+
+## Hackathon
+
+Challenge X+ USDA
+Timeline: Feb 28 to Apr 18, 2026
+Showcase: April 18, 2026

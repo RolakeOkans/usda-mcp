@@ -299,13 +299,9 @@ def execute_tool(tool_name: str, tool_input: dict) -> str:
     except Exception as e:
         return json.dumps({"error": str(e)})
 
+import time
 
 def ask_claude(question: str, message_history: list) -> tuple[str, list]:
-    """
-    Send question to Claude with full conversation history.
-    Claude remembers previous questions and answers in the session.
-    Returns the answer and the updated full message history.
-    """
     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
     system = """You are a USDA agricultural data assistant helping American farmers
@@ -325,47 +321,59 @@ def ask_claude(question: str, message_history: list) -> tuple[str, list]:
 
     messages = message_history + [{"role": "user", "content": question}]
 
-    while True:
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1024,
-            system=system,
-            tools=TOOLS,
-            messages=messages
-        )
+    max_retries = 3
+    retry_delay = 5
 
-        if response.stop_reason == "end_turn":
-            for block in response.content:
-                if hasattr(block, "text"):
+    for attempt in range(max_retries):
+        try:
+            while True:
+                response = client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=1024,
+                    system=system,
+                    tools=TOOLS,
+                    messages=messages
+                )
+
+                if response.stop_reason == "end_turn":
+                    for block in response.content:
+                        if hasattr(block, "text"):
+                            messages.append({
+                                "role": "assistant",
+                                "content": block.text
+                            })
+                            return block.text, messages
+                    return "I couldn't find data for that question.", messages
+
+                if response.stop_reason == "tool_use":
                     messages.append({
                         "role": "assistant",
-                        "content": block.text
-                    })
-                    return block.text, messages
-            return "I couldn't find data for that question.", messages
-
-        if response.stop_reason == "tool_use":
-            messages.append({
-                "role": "assistant",
-                "content": response.content
-            })
-
-            tool_results = []
-            for block in response.content:
-                if block.type == "tool_use":
-                    result = execute_tool(block.name, block.input)
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": result
+                        "content": response.content
                     })
 
-            messages.append({
-                "role": "user",
-                "content": tool_results
-            })
-        else:
-            return "Unexpected response. Please try again.", messages
+                    tool_results = []
+                    for block in response.content:
+                        if block.type == "tool_use":
+                            result = execute_tool(block.name, block.input)
+                            tool_results.append({
+                                "type": "tool_result",
+                                "tool_use_id": block.id,
+                                "content": result
+                            })
+
+                    messages.append({
+                        "role": "user",
+                        "content": tool_results
+                    })
+                else:
+                    return "Unexpected response. Please try again.", messages
+
+        except Exception as e:
+            if "overloaded" in str(e).lower() and attempt < max_retries - 1:
+                time.sleep(retry_delay)
+                retry_delay *= 2
+                continue
+            return f"The AI service is temporarily busy. Please try again in a moment.", messages
 
 
 # ── HEADER ────────────────────────────────────────────────────────────────
